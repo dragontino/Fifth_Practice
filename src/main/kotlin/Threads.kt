@@ -1,7 +1,9 @@
-import kotlinx.coroutines.*
+sealed class Thread(val name: String, quantum: Int) {
 
-@DelicateCoroutinesApi
-sealed class Thread(val threadName: String, quantum: Int) : java.lang.Thread() {
+    protected companion object {
+        const val diapason = 100000000000
+    }
+
     var quantum = quantum
         set(value) {
             context.remainingTime = value
@@ -9,34 +11,30 @@ sealed class Thread(val threadName: String, quantum: Int) : java.lang.Thread() {
         }
 
     protected var status = ThreadStatus.WAITING
-    protected val context = ThreadContext(status, quantum)
+
+    /** контекст потока */
+    protected val context = ThreadContext(quantum)
+    /**
+     * начальное время (в миллисекундах)
+     * */
     private var startTime = 0L
 
-    protected abstract fun getResultString(): String
 
-    protected fun calculateTime() =
-        ((System.currentTimeMillis() - startTime) / 1000).toInt()
+    protected abstract val resultString: String
 
-    override fun run() {
-        super.run()
+    protected fun isTimeUp() =
+        calculateRemainingTime() <= 0
+
+    protected fun calculateRemainingTime() =
+        quantum - ((System.currentTimeMillis() - startTime) / 1000).toInt()
+
+
+    /**
+     * функция, запускающая поток
+     */
+    open suspend fun run() {
         status = ThreadStatus.RUNNING
         startTime = System.currentTimeMillis()
-
-        GlobalScope.launch {
-            if (status != ThreadStatus.RUNNING)
-                cancel()
-
-            val time = calculateTime()
-
-            if (time >= quantum) {
-                status = ThreadStatus.WAITING
-                context.status = status
-                cancel()
-            }
-
-            context.remainingTime = quantum - time
-            delay(1000L)
-        }
     }
 
     fun block() {
@@ -54,20 +52,24 @@ sealed class Thread(val threadName: String, quantum: Int) : java.lang.Thread() {
         status == ThreadStatus.COMPLETED
 
     override fun toString() =
-        "Поток $threadName: статус - ${status.description}, ${ 
-            if (isCompleted()) "${getResultString()} – ${context.progress}" 
-            else "квант – $quantum"
+        "$heading, ${ 
+            if (isCompleted()) "$resultString: ${context.progress}" 
+            else "квант = $quantum"
         }"
+
+
+    val heading: String get() =
+        "Поток: $name: статус: ${status.description}"
 }
 
 
 
 class ThreadContext(
-    var status: ThreadStatus,
     var remainingTime: Int
 ) {
     var progress = 0
-    val data: Pair<Long, Long> = Pair(0, 0)
+    val primesData = Pair(0L, 3)
+    val factData = 0
 }
 
 
@@ -81,68 +83,60 @@ enum class ThreadStatus(val description: String) {
 
 
 
-@DelicateCoroutinesApi
 class PrimesThread(name: String, quantum: Int) : Thread(name, quantum) {
     private var countPrimes = context.progress
 
-    private companion object {
-        const val diapason = 10000000
-    }
-
-    override fun run() {
+    override suspend fun run() {
         super.run()
-        val start = context.data[0]
+        val start = context.primesData.first
 
         for (i in start..diapason) {
 
-            if (checkAndSave(i, 0)) return
-
-            if (isPrime(i.toInt())) {
-                if (context.data[1] > 0) {
-                    context.data[0] = i
-                    return
-                }
+            if (i.isPrime())
                 countPrimes++
-            }
+
+            if (status != ThreadStatus.RUNNING)
+                return
         }
 
         context.progress = countPrimes
         status = ThreadStatus.COMPLETED
     }
 
-    override fun getResultString() =
-        "Количество простых чисел до $diapason"
+    override val resultString = "Количество простых чисел до $diapason"
 
-    private fun isPrime(n: Int): Boolean {
-        if (n % 2 == 0)
+    private fun Long.isPrime(): Boolean {
+        if (this % 2 == 0L)
             return false
 
-        for (i in 3..sqrt(n) step 2) {
+        val start = if (context.primesData.first == this)
+            context.primesData.second
+        else 3
 
-            if (checkAndSave(0, i))
+        for (i in start..sqrt(this) step 2) {
+
+            if (isBlocked() || isTimeUp()) {
+                context.progress = countPrimes
+                context.primesData.first = this
+                context.primesData.second = i
+
+                context.remainingTime =
+                    if (isBlocked())
+                        calculateRemainingTime()
+                    else {
+                        status = ThreadStatus.WAITING
+                        0
+                    }
+
                 return false
+            }
 
-            if (n % i == 0)
+            if (this % i == 0L)
                 return false
         }
         return true
     }
 
-    private fun checkAndSave(i: Long, j: Int): Boolean {
-
-        if (status == ThreadStatus.BLOCKED) {
-            val time = calculateTime()
-            context.status = status
-            context.remainingTime = quantum - time
-        }
-
-        return if (status == ThreadStatus.WAITING) {
-            context.progress = countPrimes
-            context.data[0] = i
-            context.data[1] = j.toLong()
-            true
-        } else false
-    }
 
     private fun sqrt(n: Number) =
         kotlin.math.sqrt(n.toDouble()).toInt()
@@ -150,28 +144,32 @@ class PrimesThread(name: String, quantum: Int) : Thread(name, quantum) {
 
 
 
-@DelicateCoroutinesApi
-class FibonacciThread(name: String, quantum: Int) : Thread(name, quantum) {
-    override fun run() {
+
+
+
+class FactorialsThread(name: String, quantum: Int) : Thread(name, quantum) {
+
+    private var countFact = context.progress
+
+    override suspend fun run() {
         super.run()
+        val start = context.factData
     }
 
-    override fun getResultString(): String {
-        TODO("Not yet implemented")
-    }
+    override val resultString = "Количество факториалов от 0 до $diapason"
 }
 
 
 
-@DelicateCoroutinesApi
+
+
 class FermatThread(name: String, quantum: Int) : Thread(name, quantum) {
 
-    override fun run() {
+    override suspend fun run() {
         super.run()
+
     }
 
-    override fun getResultString(): String {
-        TODO("Not yet implemented")
-    }
+    override val resultString = "Количество опровержений теоремы Ферма в диапазоне от 0 до $diapason"
 
 }
