@@ -15,13 +15,11 @@ fun main() {
         print("Введите квант для ${it + 1} потока: ")
         val quantum = input.nextInt()
 
-        PrimesThread("Поиск простых чисел", quantum)
-
-//        when (it) {
-//            0 -> PrimesThread("Поиск простых чисел", quantum)
-//            1 -> FactorialsThread("Вычисление факториалов", quantum)
-//            else -> FermatThread("Поиск опровержения теоремы Ферма", quantum)
-//        }
+        when (it) {
+            0 -> PrimesThread("Поиск простых чисел", quantum)
+            1 -> FactorialsThread("Вычисление факториалов", quantum)
+            else -> FermatThread("Поиск опровержения теоремы Ферма", quantum)
+        }
     }
 
 
@@ -30,6 +28,9 @@ fun main() {
      */
     val job = CoroutineScope(Dispatchers.Default).launch {
         while (true) {
+            if (!this.isActive)
+                return@launch
+
             val notCompletedThreads = threadQueue.filter {
                 !it.isCompleted() && !it.isBlocked()
             }
@@ -38,7 +39,8 @@ fun main() {
 
             val currentThread = notCompletedThreads.maxByOrNull { it.quantum }
 
-            currentThread?.run()
+            println(currentThread)
+            currentThread?.run(this)
 
             if (currentThread?.isBlocked() == false)
                 println(currentThread)
@@ -51,32 +53,37 @@ fun main() {
             if (threadQueue.find { !it.isCompleted() } == null)
                 break
 
-            delay(100)
-            val countCommands = menu
-                .printThreadsInfo("Для управления потоками введите его номер из списка ниже:")
+//            delay(100)
+
+            menu.printThreadsInfo(
+                "Для управления потоками введите его номер из списка ниже:")
 
             var cmd = input.nextInt()
-            if (cmd !in 1..countCommands) {
+
+            if (cmd !in 1..menu.countCommands) {
                 println("Неправильная команда!")
                 continue
             }
 
-            if (cmd == countThreads + 1) {
+            if (cmd == countThreads + 1)
+                continue
+            if (cmd == countThreads + 2) {
+                println("Завершение работы...")
                 break
             }
 
-            val thread = threadQueue[cmd - 1]
+            val currentThread = threadQueue[cmd - 1]
 
             launch {
                 while (true) {
-                    if (thread.isCompleted()) {
+                    if (currentThread.isCompleted()) {
                         println("\nЭтот поток уже выполнен, выберите другой!")
                         continue
                     }
                 }
             }
 
-            menu.printThreadMenu(thread)
+            menu.printThreadMenu(currentThread)
             cmd = input.nextInt()
             if (cmd !in 1..countThreads) {
                 println("Неправильная команда!")
@@ -85,20 +92,24 @@ fun main() {
 
             when (cmd) {
                 1 -> {
+                    println("Текущий квант: ${currentThread.quantum}")
                     println("Введите квант: ")
                     val q = input.nextInt()
                     if (q > 0)
-                        thread.quantum = q
+                        currentThread.quantum = q
                 }
                 2 -> {
-                    if (thread.isBlocked())
-                        thread.unlock()
-                    else
-                        thread.block()
+                    if (currentThread.isBlocked()) {
+                        currentThread.unlock()
+                        println("Поток разблокирован!")
+                    } else {
+                        currentThread.block()
+                        println("Поток заблокирован!")
+                    }
                 }
             }
+            continue
         }
-
         job.cancelAndJoin()
     }
 
@@ -107,15 +118,18 @@ fun main() {
 
 
 private class Menu {
-    fun printThreadsInfo(menuHeader: String = ""): Int {
+
+    val countCommands = countThreads + 2
+
+    fun printThreadsInfo(menuHeader: String = "") {
         if (menuHeader.isNotEmpty())
             println("\n$menuHeader")
         threadQueue.forEachIndexed { index, thread ->
             println("${index + 1}. $thread")
         }
-        println("${countThreads + 1}. Завершить работу")
-
-        return countThreads + 1
+        println("${countThreads + 1}. Обновить данные")
+        println("${countThreads + 2}. Завершить работу")
+        print(">> ")
     }
 
     fun printThreadMenu(thread: Thread) {
@@ -127,5 +141,6 @@ private class Menu {
             else "2. Заблокировать"
         )
         println("3. Вернуться назад")
+        println(">> ")
     }
 }
