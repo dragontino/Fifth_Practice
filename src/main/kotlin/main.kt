@@ -11,6 +11,7 @@ private val menu = Menu()
 fun main() {
     val input = Scanner(System.`in`)
 
+
     threadQueue = Array(countThreads) {
         print("Введите квант для ${it + 1} потока: ")
         val quantum = input.nextInt()
@@ -23,27 +24,35 @@ fun main() {
     }
 
 
+    var currentThreadIndex = 0
+
     /**
      * корутина для запуска "потоков"
      */
     val job = CoroutineScope(Dispatchers.Default).launch {
-        while (true) {
-            if (!this.isActive)
-                return@launch
 
+        while (true) {
             val notCompletedThreads = threadQueue.filter {
                 !it.isCompleted() && !it.isBlocked()
+            }.sortedByDescending {
+                it.quantum
             }
+
             if (notCompletedThreads.isEmpty())
                 return@launch
 
-            val currentThread = notCompletedThreads.maxByOrNull { it.quantum }
+            currentThreadIndex %= notCompletedThreads.size
 
-            println(currentThread)
-            currentThread?.run(this)
+            val currentThread = notCompletedThreads[currentThreadIndex]
+            currentThreadIndex = (currentThreadIndex + 1) % notCompletedThreads.size
 
-            if (currentThread?.isBlocked() == false)
+            currentThread.run(this)
+
+            if (!currentThread.isBlocked())
                 println(currentThread)
+
+            if (!isActive)
+                return@launch
         }
     }
 

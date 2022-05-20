@@ -75,6 +75,8 @@ sealed class Thread(private val name: String, quantum: Int) {
         this.scope = scope
         status = ThreadStatus.RUNNING
         startTime = System.currentTimeMillis()
+
+        println(this)
     }
 
     fun block() {
@@ -99,7 +101,7 @@ sealed class Thread(private val name: String, quantum: Int) {
 
     val heading: String get() {
         val percentFormatted = String.format(Locale.ENGLISH, "%.1f", this.percent)
-        return "Поток: $name: статус: ${status.description}, процент выполнения: $percentFormatted%"
+        return "Поток: $name: статус: ${status.description.uppercase()}, процент выполнения: $percentFormatted%"
     }
 }
 
@@ -148,6 +150,11 @@ enum class ThreadStatus(val description: String) {
 
 
 class PrimesThread(name: String, quantum: Int) : Thread(name, quantum) {
+
+    private companion object {
+        const val diapason = 50000000
+    }
+
     private var countPrimes = context.progress
     private var currentI = 0L
 
@@ -249,7 +256,7 @@ class FactorialsThread(name: String, quantum: Int) : Thread(name, quantum) {
 class FermatThread(name: String, quantum: Int) : Thread(name, quantum) {
 
     private companion object {
-        const val diapason = 10000000
+        const val diapason = 10000
     }
 
     private var countFermat = context.progress
@@ -262,7 +269,8 @@ class FermatThread(name: String, quantum: Int) : Thread(name, quantum) {
             for (b in context.fermatData[1]..diapason)
                 for (c in context.fermatData[2]..(diapason)) {
 
-                    currentProgress = a * (diapason pow 2) + b * diapason + c
+                    currentProgress = a * (getDiapasonLength(1) * getDiapasonLength(2)) +
+                            b * getDiapasonLength(2) + c
 
                     if (checkAndSave(scope, progress = countFermat, type = TaskType.FERMAT, a, b, c))
                         return
@@ -275,6 +283,9 @@ class FermatThread(name: String, quantum: Int) : Thread(name, quantum) {
         context.progress = countFermat
         status = ThreadStatus.COMPLETED
     }
+
+    private fun getDiapasonLength(i: Int) =
+        diapason - context.fermatData[i]
 
     private infix fun Int.pow(n: Int) =
         toDouble().pow(n).toInt()
